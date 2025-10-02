@@ -24,7 +24,7 @@ const adjustTimestamp = (timestamp: Date): Date => {
   return adjusted;
 };
 
-// Generar datos de ejemplo para 3 días
+// Generar datos de ejemplo para 3 días - UNA medida por hora
 const generateSampleData = (): PhReading[] => {
   const data: PhReading[] = [];
   const now = new Date();
@@ -32,11 +32,11 @@ const generateSampleData = (): PhReading[] => {
   startDate.setDate(startDate.getDate() - 2);
   startDate.setHours(0, 0, 0, 0);
 
-  // Generar lecturas cada hora con algunos minutos aleatorios
+  // Generar exactamente 72 lecturas (3 días * 24 horas)
   for (let i = 0; i < 72; i++) {
     const timestamp = new Date(startDate);
     timestamp.setHours(timestamp.getHours() + i);
-    timestamp.setMinutes(Math.floor(Math.random() * 60)); // Minutos aleatorios
+    timestamp.setMinutes(0, 0, 0); // Exactamente en punto
     
     // pH oscila entre 6.5 y 8.5 con variaciones realistas
     const basePh = 7.2;
@@ -55,20 +55,24 @@ const generateSampleData = (): PhReading[] => {
 const PhChart = () => {
   const rawData = generateSampleData();
   
-  // Procesar datos: ajustar timestamps y preparar para el gráfico
-  const chartData = rawData.map(reading => {
-    const adjustedTime = adjustTimestamp(reading.timestamp);
+  // Procesar datos: preparar para el gráfico con índice secuencial
+  const chartData = rawData.map((reading, index) => {
+    const time = reading.timestamp;
     return {
-      timestamp: adjustedTime.getTime(),
-      displayTime: `${adjustedTime.getHours().toString().padStart(2, '0')}:00`,
-      displayDate: adjustedTime.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }),
+      index, // Índice para el eje X
+      timestamp: time.getTime(),
+      displayTime: `${time.getHours().toString().padStart(2, '0')}:00`,
+      displayDate: time.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }),
+      fullDate: time.toLocaleDateString('es-ES'),
       ph: reading.ph,
-      isMidnight: adjustedTime.getHours() === 0
+      isMidnight: time.getHours() === 0
     };
   });
 
-  // Encontrar puntos de medianoche para las líneas verticales
-  const midnightPoints = chartData.filter(d => d.isMidnight).map(d => d.timestamp);
+  // Encontrar índices de medianoche para las líneas verticales
+  const midnightIndices = chartData
+    .filter(d => d.isMidnight)
+    .map(d => d.index);
 
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
@@ -109,7 +113,8 @@ const PhChart = () => {
             <XAxis
               dataKey="displayTime"
               stroke="hsl(var(--muted-foreground))"
-              tick={{ fill: 'hsl(var(--muted-foreground))' }}
+              tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+              interval={3} // Mostrar etiquetas cada 4 horas para mejor legibilidad
               label={{ 
                 value: 'Hora del día', 
                 position: 'insideBottom', 
@@ -130,22 +135,25 @@ const PhChart = () => {
             />
             <Tooltip content={<CustomTooltip />} />
             
-            {/* Líneas verticales para marcar medianoche (00:00) */}
-            {midnightPoints.map((timestamp, index) => (
-              <ReferenceLine
-                key={`midnight-${index}`}
-                x={timestamp}
-                stroke="hsl(var(--chart-day-separator))"
-                strokeWidth={2}
-                strokeDasharray="5 5"
-                label={{
-                  value: 'Nuevo día',
-                  position: 'top',
-                  fill: 'hsl(var(--chart-day-separator))',
-                  fontSize: 12
-                }}
-              />
-            ))}
+            {/* Líneas verticales para marcar medianoche (00:00) - separador de días */}
+            {midnightIndices.map((indexValue, idx) => {
+              const dataPoint = chartData[indexValue];
+              return (
+                <ReferenceLine
+                  key={`midnight-${idx}`}
+                  x={indexValue}
+                  stroke="hsl(var(--destructive))"
+                  strokeWidth={2}
+                  label={{
+                    value: `${dataPoint.fullDate}`,
+                    position: 'top',
+                    fill: 'hsl(var(--destructive))',
+                    fontSize: 11,
+                    fontWeight: 600
+                  }}
+                />
+              );
+            })}
             
             {/* Líneas de referencia para pH neutro y rangos */}
             <ReferenceLine
@@ -165,8 +173,9 @@ const PhChart = () => {
               dataKey="ph"
               stroke="hsl(var(--chart-1))"
               strokeWidth={3}
-              dot={{ fill: 'hsl(var(--chart-1))', r: 4 }}
+              dot={{ fill: 'hsl(var(--chart-1))', r: 3 }}
               activeDot={{ r: 6, fill: 'hsl(var(--chart-2))' }}
+              isAnimationActive={true}
             />
           </LineChart>
         </ResponsiveContainer>
